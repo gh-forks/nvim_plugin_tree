@@ -1,277 +1,144 @@
-local api = vim.api
-local luv = vim.loop
+local view = require("nvim-tree.view")
+local core = require("nvim-tree.core")
+local events = require("nvim-tree.events")
+local notify = require("nvim-tree.notify")
 
-local renderer = require'nvim-tree.renderer'
-local diagnostics = require'nvim-tree.diagnostics'
-local explorer = require'nvim-tree.explorer'
-local utils = require'nvim-tree.utils'
-local view = require'nvim-tree.view'
-local events = require'nvim-tree.events'
-local git = require'nvim-tree.git'
+---@class LibOpenOpts
+---@field path string|nil path
+---@field current_window boolean|nil default false
+---@field winid number|nil
 
-local first_init_done = false
-
-local M = {}
-
-M.Tree = {
-  nodes = {},
-  cwd = nil,
+local M = {
   target_winid = nil,
 }
 
-local function load_children(cwd, children, parent)
-  git.load_project_status(cwd, function(git_statuses)
-    explorer.explore(children, cwd, parent, git_statuses)
-    M.redraw()
-  end)
-end
-
-function M.init(with_open, foldername)
-  M.Tree.nodes = {}
-  M.Tree.cwd = foldername or luv.cwd()
-
-  if with_open then
-    M.open()
-  end
-
-  load_children(M.Tree.cwd, M.Tree.nodes)
-
-  if not first_init_done then
-    events._dispatch_ready()
-    first_init_done = true
-  end
-end
-
-function M.redraw()
-  renderer.draw(M.Tree, true)
-end
-
-local function get_node_at_line(line)
-  local index = view.View.hide_root_folder and 1 or 2
-  local function iter(nodes)
-    for _, node in ipairs(nodes) do
-      if index == line then
-        return node
-      end
-      index = index + 1
-      if node.open == true then
-        local child = iter(node.nodes)
-        if child ~= nil then return child end
-      end
-    end
-  end
-  return iter
-end
-
-function M.get_node_at_cursor()
-  local winnr = view.get_winnr()
-  local hide_root_folder = view.View.hide_root_folder
-  if not winnr then
-    return
-  end
-  local cursor = api.nvim_win_get_cursor(view.get_winnr())
-  local line = cursor[1]
-  if view.is_help_ui() then
-    local help_lines = require'nvim-tree.renderer.help'.compute_lines()
-    local help_text = get_node_at_line(line+1)(help_lines)
-    return {name = help_text}
-  else
-    if line == 1 and M.Tree.cwd ~= "/" and not hide_root_folder then
-      return { name = ".." }
-    end
-
-    if M.Tree.cwd == "/" then
-      line = line + 1
-    end
-    return get_node_at_line(line)(M.Tree.nodes)
-  end
-end
-
--- If node is grouped, return the last node in the group. Otherwise, return the given node.
-function M.get_last_group_node(node)
-  local next = node
-  while next.group_next do
-    next = next.group_next
-  end
-  return next
-end
-
-function M.expand_or_collapse(node)
-  node.open = not node.open
-  if node.has_children then node.has_children = false end
-  if #node.nodes == 0 then
-    load_children(
-      node.link_to or node.absolute_path,
-      node.nodes,
-      node
-    )
-  else
-    M.redraw()
-  end
-
-  diagnostics.update()
-end
-
-local function refresh_nodes(node, projects)
-  local project_root = git.get_project_root(node.absolute_path or node.cwd)
-  explorer.refresh(node.nodes, node.absolute_path or node.cwd, node, projects[project_root] or {})
-  for _, _node in ipairs(node.nodes) do
-    if _node.nodes and _node.open then
-      refresh_nodes(_node, projects)
-    end
-  end
-end
-
-local event_running = false
-function M.refresh_tree(callback)
-  if event_running or not M.Tree.cwd or vim.v.exiting ~= vim.NIL then
-    return
-  end
-  event_running = true
-
-  git.reload(function(projects)
-    refresh_nodes(M.Tree, projects)
-    if view.win_open() then
-      M.redraw()
-      if callback and type(callback) == 'function' then
-        callback()
-      end
-    end
-    diagnostics.update()
-    event_running = false
-  end)
-end
-
-local function reload_node_status(parent_node, projects)
-  local project_root = git.get_project_root(parent_node.absolute_path or parent_node.cwd)
-  local status = projects[project_root] or {}
-  for _, node in ipairs(parent_node.nodes) do
-    if node.nodes then
-      node.git_status = status.dirs and status.dirs[node.absolute_path]
-    else
-      node.git_status = status.files and status.files[node.absolute_path]
-    end
-    if node.nodes and #node.nodes > 0 then
-      reload_node_status(node, projects)
-    end
-  end
-end
-
-function M.reload_git()
-  if not git.config.enable or event_running then
-    return
-  end
-  event_running = true
-
-  git.reload(function(projects)
-    reload_node_status(M.Tree, projects)
-    M.redraw()
-    event_running = false
-  end)
-end
-
-function M.set_index_and_redraw(fname)
-  local i
-  local hide_root_folder = view.View.hide_root_folder
-  if M.Tree.cwd == '/' or hide_root_folder then
-    i = 0
-  else
-    i = 1
-  end
-
-  local tree_altered = false
-
-  local function iterate_nodes(nodes)
-    for _, node in ipairs(nodes) do
-      i = i + 1
-      if node.absolute_path == fname then
-        return i
-      end
-
-      local path_matches = utils.str_find(fname, node.absolute_path..utils.path_separator)
-      if path_matches then
-        if #node.nodes == 0 then
-          node.open = true
-          explorer.explore(node.nodes, node.absolute_path, node, {})
-          git.load_project_status(node.absolute_path, function(status)
-            if status.dirs or status.files then
-              reload_node_status(node, git.projects)
-            end
-            M.redraw()
-          end)
-        end
-        if node.open == false then
-          node.open = true
-          tree_altered = true
-        end
-        if iterate_nodes(node.nodes) ~= nil then
-          return i
-        end
-      elseif node.open == true then
-        iterate_nodes(node.nodes)
-      end
-    end
-  end
-
-  local index = iterate_nodes(M.Tree.nodes)
-  if tree_altered then
-    M.redraw()
-  end
-  if index and view.win_open() then
-    view.set_cursor({index, 0})
-  end
-end
-
 function M.set_target_win()
-  local id = api.nvim_get_current_win()
+  local id = vim.api.nvim_get_current_win()
   local tree_id = view.get_winnr()
   if tree_id and id == tree_id then
-    M.Tree.target_winid = 0
+    M.target_winid = 0
     return
   end
 
-  M.Tree.target_winid = id
+  M.target_winid = id
 end
 
-function M.open()
-  M.set_target_win()
+---@param cwd string
+local function handle_buf_cwd(cwd)
+  if M.respect_buf_cwd and cwd ~= core.get_cwd() then
+    require("nvim-tree.actions.root.change-dir").fn(cwd)
+  end
+end
 
+local function open_view_and_draw()
   local cwd = vim.fn.getcwd()
-  local should_redraw = view.open()
+  view.open()
+  handle_buf_cwd(cwd)
 
-  local respect_buf_cwd = vim.g.nvim_tree_respect_buf_cwd or 0
-  if respect_buf_cwd == 1 and cwd ~= M.Tree.cwd then
-    require'nvim-tree.actions.change-dir'.fn(cwd)
-  end
-  if should_redraw then
-    M.redraw()
+  local explorer = core.get_explorer()
+  if explorer then
+    explorer.renderer:draw()
   end
 end
 
-function M.close_node(node)
-  require'nvim-tree.actions.movements'.parent_node(node, true)
+local function should_hijack_current_buf()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local bufname = vim.api.nvim_buf_get_name(bufnr)
+
+  local bufmodified, ft
+  if vim.fn.has("nvim-0.10") == 1 then
+    bufmodified = vim.api.nvim_get_option_value("modified", { buf = bufnr })
+    ft = vim.api.nvim_get_option_value("ft", { buf = bufnr })
+  else
+    bufmodified = vim.api.nvim_buf_get_option(bufnr, "modified") ---@diagnostic disable-line: deprecated
+    ft = vim.api.nvim_buf_get_option(bufnr, "ft") ---@diagnostic disable-line: deprecated
+  end
+
+  local should_hijack_unnamed = M.hijack_unnamed_buffer_when_opening and bufname == "" and not bufmodified and ft == ""
+  local should_hijack_dir = bufname ~= "" and vim.fn.isdirectory(bufname) == 1 and M.hijack_directories.enable
+
+  return should_hijack_dir or should_hijack_unnamed
 end
 
-function M.toggle_ignored()
-  explorer.config.filter_ignored = not explorer.config.filter_ignored
-  return M.refresh_tree()
+---@param prompt_input string
+---@param prompt_select string
+---@param items_short string[]
+---@param items_long string[]
+---@param kind string|nil
+---@param callback fun(item_short: string|nil)
+function M.prompt(prompt_input, prompt_select, items_short, items_long, kind, callback)
+  local function format_item(short)
+    for i, s in ipairs(items_short) do
+      if short == s then
+        return items_long[i]
+      end
+    end
+    return ""
+  end
+
+  if M.select_prompts then
+    vim.ui.select(items_short, { prompt = prompt_select, kind = kind, format_item = format_item }, function(item_short)
+      callback(item_short)
+    end)
+  else
+    vim.ui.input({ prompt = prompt_input, default = items_short[1] or "" }, function(item_short)
+      if item_short then
+        callback(string.lower(item_short and item_short:sub(1, 1)) or nil)
+      end
+    end)
+  end
 end
 
-function M.toggle_dotfiles()
-  explorer.config.filter_dotfiles = not explorer.config.filter_dotfiles
-  return M.refresh_tree()
+---Open the tree, initialising as needed. Maybe hijack the current buffer.
+---@param opts LibOpenOpts|nil
+function M.open(opts)
+  opts = opts or {}
+
+  M.set_target_win()
+  if not core.get_explorer() or opts.path then
+    if opts.path then
+      core.init(opts.path)
+    else
+      local cwd, err = vim.loop.cwd()
+      if not cwd then
+        notify.error(string.format("current working directory unavailable: %s", err))
+        return
+      end
+      core.init(cwd)
+    end
+  end
+
+  local explorer = core.get_explorer()
+
+  if should_hijack_current_buf() then
+    view.close_this_tab_only()
+    view.open_in_win()
+    if explorer then
+      explorer.renderer:draw()
+    end
+  elseif opts.winid then
+    view.open_in_win({ hijack_current_buf = false, resize = false, winid = opts.winid })
+    if explorer then
+      explorer.renderer:draw()
+    end
+  elseif opts.current_window then
+    view.open_in_win({ hijack_current_buf = false, resize = false })
+    if explorer then
+      explorer.renderer:draw()
+    end
+  else
+    open_view_and_draw()
+  end
+  view.restore_tab_state()
+  events._dispatch_on_tree_open()
 end
 
-function M.toggle_help()
-  view.toggle_help()
-  return M.redraw()
+function M.setup(opts)
+  M.hijack_unnamed_buffer_when_opening = opts.hijack_unnamed_buffer_when_opening
+  M.hijack_directories = opts.hijack_directories
+  M.respect_buf_cwd = opts.respect_buf_cwd
+  M.select_prompts = opts.select_prompts
+  M.group_empty = opts.renderer.group_empty
 end
-
--- @deprecated: use nvim-tree.actions.collapse-all.fn
-M.collapse_all = require'nvim-tree.actions.collapse-all'.fn
--- @deprecated: use nvim-tree.actions.dir-up.fn
-M.dir_up = require'nvim-tree.actions.dir-up'.fn
--- @deprecated: use nvim-tree.actions.change-dir.fn
-M.change_dir = require'nvim-tree.actions.change-dir'.fn
 
 return M

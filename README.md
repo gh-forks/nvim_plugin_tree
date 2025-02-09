@@ -1,310 +1,186 @@
 # A File Explorer For Neovim Written In Lua
 
-[![Linting and style checking](https://github.com/kyazdani42/nvim-tree.lua/actions/workflows/luacheck.yml/badge.svg)](https://github.com/kyazdani42/nvim-tree.lua/actions/workflows/luacheck.yml)
+[![CI](https://github.com/nvim-tree/nvim-tree.lua/actions/workflows/ci.yml/badge.svg)](https://github.com/nvim-tree/nvim-tree.lua/actions/workflows/ci.yml)
 
-## Notice
+<img align="left" width="199" height="598" src="https://user-images.githubusercontent.com/1505378/232662694-8dc494e0-24da-497a-8541-29344293378c.png">
+<img align="left" width="199" height="598" src="https://user-images.githubusercontent.com/1505378/232662698-2f321315-c67a-486b-85d8-8c391de52392.png">
 
-This plugin requires [neovim >=0.5.0](https://github.com/neovim/neovim/wiki/Installing-Neovim).
+   Automatic updates
 
-If you have issues since the recent setup migration, check out [this guide](https://github.com/kyazdani42/nvim-tree.lua/issues/674)
+   File type icons
+
+   Git integration
+
+   Diagnostics integration: LSP and COC
+
+   (Live) filtering
+
+   Cut, copy, paste, rename, delete, create
+
+   Highly customisable
+
+<br clear="left"/>
+<br />
+
+Take a look at the [wiki](https://github.com/nvim-tree/nvim-tree.lua/wiki) for Showcases, Tips, Recipes and more.
+
+Questions and general support: [Discussions](https://github.com/nvim-tree/nvim-tree.lua/discussions)
+
+## Requirements
+
+[neovim >=0.9.0](https://github.com/neovim/neovim/wiki/Installing-Neovim)
+
+[nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) is optional and used to display file icons. It requires a [patched font](https://www.nerdfonts.com/). Your terminal emulator must be configured to use that font, usually "Hack Nerd Font"
 
 ## Install
 
-Install with [vim-plug](https://github.com/junegunn/vim-plug):
+Please install via your preferred package manager. See [Installation](https://github.com/nvim-tree/nvim-tree.lua/wiki/Installation) for specific package manager instructions.
 
-```vim
-" requires
-Plug 'kyazdani42/nvim-web-devicons' " for file icons
-Plug 'kyazdani42/nvim-tree.lua'
-```
+`nvim-tree/nvim-tree.lua`
 
-Install with [packer](https://github.com/wbthomason/packer.nvim):
+Major or minor versions may be specified via tags: `v<MAJOR>` e.g. `v1` or `v<MAJOR>.<MINOR>` e.g. `v1.23`
 
-```lua
-use {
-    'kyazdani42/nvim-tree.lua',
-    requires = {
-      'kyazdani42/nvim-web-devicons', -- optional, for file icon
-    },
-    config = function() require'nvim-tree'.setup {} end
-}
-```
+`nvim-tree/nvim-web-devicons` optional, for file icons
 
-## Setup
+Disabling [netrw](https://neovim.io/doc/user/pi_netrw.html) is strongly advised, see [:help nvim-tree-netrw](doc/nvim-tree-lua.txt)
 
-Options are currently being migrated into the setup function, you need to run `require'nvim-tree'.setup()` in your personal configurations.
-Setup should be run in a lua file or in a lua heredoc (`:help lua-heredoc`) if using in a vim file.
-Note that options under the `g:` command should be set **BEFORE** running the setup function.
+## Quick Start
+
+### Setup
+
+Setup the plugin in your `init.lua`
 
 ```lua
--- following options are the default
--- each of these are documented in `:help nvim-tree.OPTION_NAME`
-require'nvim-tree'.setup {
-  disable_netrw       = true,
-  hijack_netrw        = true,
-  open_on_setup       = false,
-  ignore_ft_on_setup  = {},
-  auto_close          = false,
-  open_on_tab         = false,
-  hijack_cursor       = false,
-  update_cwd          = false,
-  update_to_buf_dir   = {
-    enable = true,
-    auto_open = true,
-  },
-  diagnostics = {
-    enable = false,
-    icons = {
-      hint = "",
-      info = "",
-      warning = "",
-      error = "",
-    }
-  },
-  update_focused_file = {
-    enable      = false,
-    update_cwd  = false,
-    ignore_list = {}
-  },
-  system_open = {
-    cmd  = nil,
-    args = {}
-  },
-  filters = {
-    dotfiles = false,
-    custom = {}
-  },
-  git = {
-    enable = true,
-    ignore = true,
-    timeout = 500,
+-- disable netrw at the very start of your init.lua
+vim.g.loaded_netrw = 1
+vim.g.loaded_netrwPlugin = 1
+
+-- optionally enable 24-bit colour
+vim.opt.termguicolors = true
+
+-- empty setup using defaults
+require("nvim-tree").setup()
+
+-- OR setup with some options
+require("nvim-tree").setup({
+  sort = {
+    sorter = "case_sensitive",
   },
   view = {
     width = 30,
-    height = 30,
-    hide_root_folder = false,
-    side = 'left',
-    auto_resize = false,
-    mappings = {
-      custom_only = false,
-      list = {}
-    },
-    number = false,
-    relativenumber = false,
-    signcolumn = "yes"
   },
-  trash = {
-    cmd = "trash",
-    require_confirm = true
+  renderer = {
+    group_empty = true,
   },
-  actions = {
-    change_dir = {
-      global = false,
-    },
-    open_file = {
-      quit_on_open = false,
-    }
-  }
-}
+  filters = {
+    dotfiles = true,
+  },
+})
 ```
 
-These additional options must be set **BEFORE** calling `require'nvim-tree'` or calling setup.
-They are being migrated to the setup function bit by bit, check [this issue](https://github.com/kyazdani42/nvim-tree.lua/issues/674) if you encounter any problems related to configs not working after update.
-```vim
-let g:nvim_tree_indent_markers = 1 "0 by default, this option shows indent markers when folders are open
-let g:nvim_tree_git_hl = 1 "0 by default, will enable file highlight for git attributes (can be used without the icons).
-let g:nvim_tree_highlight_opened_files = 1 "0 by default, will enable folder and file icon highlight for opened files/directories.
-let g:nvim_tree_root_folder_modifier = ':~' "This is the default. See :help filename-modifiers for more options
-let g:nvim_tree_add_trailing = 1 "0 by default, append a trailing slash to folder names
-let g:nvim_tree_group_empty = 1 " 0 by default, compact folders that only contain a single folder into one node in the file tree
-let g:nvim_tree_disable_window_picker = 1 "0 by default, will disable the window picker.
-let g:nvim_tree_icon_padding = ' ' "one space by default, used for rendering the space between the icon and the filename. Use with caution, it could break rendering if you set an empty string depending on your font.
-let g:nvim_tree_symlink_arrow = ' >> ' " defaults to ' ➛ '. used as a separator between symlinks' source and target.
-let g:nvim_tree_respect_buf_cwd = 1 "0 by default, will change cwd of nvim-tree to that of new buffer's when opening nvim-tree.
-let g:nvim_tree_create_in_closed_folder = 0 "1 by default, When creating files, sets the path of a file when cursor is on a closed folder to the parent folder when 0, and inside the folder when 1.
-let g:nvim_tree_window_picker_exclude = {
-    \   'filetype': [
-    \     'notify',
-    \     'packer',
-    \     'qf'
-    \   ],
-    \   'buftype': [
-    \     'terminal'
-    \   ]
-    \ }
-" Dictionary of buffer option names mapped to a list of option values that
-" indicates to the window picker that the buffer's window should not be
-" selectable.
-let g:nvim_tree_special_files = { 'README.md': 1, 'Makefile': 1, 'MAKEFILE': 1 } " List of filenames that gets highlighted with NvimTreeSpecialFile
-let g:nvim_tree_show_icons = {
-    \ 'git': 1,
-    \ 'folders': 0,
-    \ 'files': 0,
-    \ 'folder_arrows': 0,
-    \ }
-"If 0, do not show the icons for one of 'git' 'folder' and 'files'
-"1 by default, notice that if 'files' is 1, it will only display
-"if nvim-web-devicons is installed and on your runtimepath.
-"if folder is 1, you can also tell folder_arrows 1 to show small arrows next to the folder icons.
-"but this will not work when you set indent_markers (because of UI conflict)
+### Help
 
-" default will show icon by default if no icon is provided
-" default shows no icon by default
-let g:nvim_tree_icons = {
-    \ 'default': '',
-    \ 'symlink': '',
-    \ 'git': {
-    \   'unstaged': "✗",
-    \   'staged': "✓",
-    \   'unmerged': "",
-    \   'renamed': "➜",
-    \   'untracked': "★",
-    \   'deleted': "",
-    \   'ignored': "◌"
-    \   },
-    \ 'folder': {
-    \   'arrow_open': "",
-    \   'arrow_closed': "",
-    \   'default': "",
-    \   'open': "",
-    \   'empty': "",
-    \   'empty_open': "",
-    \   'symlink': "",
-    \   'symlink_open': "",
-    \   }
-    \ }
+Open the tree:  `:NvimTreeOpen`
 
-nnoremap <C-n> :NvimTreeToggle<CR>
-nnoremap <leader>r :NvimTreeRefresh<CR>
-nnoremap <leader>n :NvimTreeFindFile<CR>
-" NvimTreeOpen, NvimTreeClose, NvimTreeFocus, NvimTreeFindFileToggle, and NvimTreeResize are also available if you need them
+Show the mappings:  `g?`
 
-set termguicolors " this variable must be enabled for colors to be applied properly
+### Custom Mappings
 
-" a list of groups can be found at `:help nvim_tree_highlight`
-highlight NvimTreeFolderIcon guibg=blue
-```
+[:help nvim-tree-mappings-default](doc/nvim-tree-lua.txt) are applied by default however you may customise via |nvim-tree.on_attach| e.g.
 
-## KeyBindings
-
-### Default actions
-
-- `<CR>` or `o` on `..` will cd in the above directory
-- `<C-]>` will cd in the directory under the cursor
-- `<BS>` will close current opened directory or parent
-- type `a` to add a file. Adding a directory requires leaving a leading `/` at the end of the path.
-  > you can add multiple directories by doing foo/bar/baz/f and it will add foo bar and baz directories and f as a file
-- type `r` to rename a file
-- type `<C-r>` to rename a file and omit the filename on input
-- type `x` to add/remove file/directory to cut clipboard
-- type `c` to add/remove file/directory to copy clipboard
-- type `y` will copy name to system clipboard
-- type `Y` will copy relative path to system clipboard
-- type `gy` will copy absolute path to system clipboard
-- type `p` to paste from clipboard. Cut clipboard has precedence over copy (will prompt for confirmation)
-- type `d` to delete a file (will prompt for confirmation)
-- type `D` to trash a file (configured in setup())
-- type `]c` to go to next git item
-- type `[c` to go to prev git item
-- type `-` to navigate up to the parent directory of the current file/directory
-- type `s` to open a file with default system application or a folder with default file manager (if you want to change the command used to do it see `:h nvim-tree.setup` under `system_open`)
-- if the file is a directory, `<CR>` will open the directory otherwise it will open the file in the buffer near the tree
-- if the file is a symlink, `<CR>` will follow the symlink (if the target is a file)
-- `<C-v>` will open the file in a vertical split
-- `<C-x>` will open the file in a horizontal split
-- `<C-t>` will open the file in a new tab
-- `<Tab>` will open the file as a preview (keeps the cursor in the tree)
-- `I` will toggle visibility of hidden folders / files
-- `H` will toggle visibility of dotfiles (files/folders starting with a `.`)
-- `R` will refresh the tree
-- Double left click acts like `<CR>`
-- Double right click acts like `<C-]>`
-
-### Settings
-
-The `list` option in `view.mappings.list` is a table of
 ```lua
--- key can be either a string or a table of string (lhs)
--- action is the name of the action
--- action_cb is the function that will be called, it receives the node as a parameter. Optional for default actions
--- mode is normal by default
+local function my_on_attach(bufnr)
+  local api = require "nvim-tree.api"
 
-local tree_cb = require'nvim-tree.config'.nvim_tree_callback
+  local function opts(desc)
+    return { desc = "nvim-tree: " .. desc, buffer = bufnr, noremap = true, silent = true, nowait = true }
+  end
 
-local function print_node_path(node) {
-  print(node.absolute_path)
-}
+  -- default mappings
+  api.config.mappings.default_on_attach(bufnr)
 
-local list = {
-  { key = {"<CR>", "o" }, action = "edit", mode = "n"},
-  { key = "p", action = "print_path", action_cb = print_node_path },
-  { key = "s", cb = tree_cb("vsplit") }, --tree_cb and the cb property are deprecated
+  -- custom mappings
+  vim.keymap.set('n', '<C-t>', api.tree.change_root_to_parent,        opts('Up'))
+  vim.keymap.set('n', '?',     api.tree.toggle_help,                  opts('Help'))
+end
+
+-- pass to setup along with your other options
+require("nvim-tree").setup {
+  ---
+  on_attach = my_on_attach,
+  ---
 }
 ```
 
-These are the default bindings:
+### Highlight
+
+Run `:NvimTreeHiTest` to show all the highlights that nvim-tree uses.
+
+They can be customised before or after setup is called and will be immediately
+applied at runtime. e.g.
+
 ```lua
-
--- default mappings
-local list = {
-  { key = {"<CR>", "o", "<2-LeftMouse>"}, action = "edit" },
-  { key = {"O"},                          action = "edit_no_picker" },
-  { key = {"<2-RightMouse>", "<C-]>"},    action = "cd" },
-  { key = "<C-v>",                        action = "vsplit" },
-  { key = "<C-x>",                        action = "split" },
-  { key = "<C-t>",                        action = "tabnew" },
-  { key = "<",                            action = "prev_sibling" },
-  { key = ">",                            action = "next_sibling" },
-  { key = "P",                            action = "parent_node" },
-  { key = "<BS>",                         action = "close_node" },
-  { key = "<Tab>",                        action = "preview" },
-  { key = "K",                            action = "first_sibling" },
-  { key = "J",                            action = "last_sibling" },
-  { key = "I",                            action = "toggle_ignored" },
-  { key = "H",                            action = "toggle_dotfiles" },
-  { key = "R",                            action = "refresh" },
-  { key = "a",                            action = "create" },
-  { key = "d",                            action = "remove" },
-  { key = "D",                            action = "trash" },
-  { key = "r",                            action = "rename" },
-  { key = "<C-r>",                        action = "full_rename" },
-  { key = "x",                            action = "cut" },
-  { key = "c",                            action = "copy" },
-  { key = "p",                            action = "paste" },
-  { key = "y",                            action = "copy_name" },
-  { key = "Y",                            action = "copy_path" },
-  { key = "gy",                           action = "copy_absolute_path" },
-  { key = "[c",                           action = "prev_git_item" },
-  { key = "]c",                           action = "next_git_item" },
-  { key = "-",                            action = "dir_up" },
-  { key = "s",                            action = "system_open" },
-  { key = "q",                            action = "close" },
-  { key = "g?",                           action = "toggle_help" },
-}
+vim.cmd([[
+    :hi      NvimTreeExecFile    guifg=#ffa0a0
+    :hi      NvimTreeSpecialFile guifg=#ff80ff gui=underline
+    :hi      NvimTreeSymlink     guifg=Yellow  gui=italic
+    :hi link NvimTreeImageFile   Title
+]])
 ```
+See [:help nvim-tree-highlight](doc/nvim-tree-lua.txt) for details.
 
-You can toggle the help UI by pressing `g?`.
+## Commands
 
-## Tips & reminders
+See [:help nvim-tree-commands](doc/nvim-tree-lua.txt)
 
-1. you can add a directory by adding a `/` at the end of the paths, entering multiple directories `BASE/foo/bar/baz` will add directory foo, then bar and add a file baz to it.
+Basic commands:
 
-## Features
+`:NvimTreeToggle` Open or close the tree. Takes an optional path argument.
 
-- Open file in current buffer or in split with FzF like bindings (`<CR>`, `<C-v>`, `<C-x>`, `<C-t>`)
-- File icons with nvim-web-devicons
-- Syntax highlighting ([exa](https://github.com/ogham/exa) like)
-- Change directory with `.`
-- Add / Rename / delete files
-- Git integration (icons and file highlight)
-- Lsp diagnostics integration (signs)
-- Indent markers
-- Mouse support
-- It's fast
+`:NvimTreeFocus` Open the tree if it is closed, and then focus on the tree.
+
+`:NvimTreeFindFile` Move the cursor in the tree for the current buffer, opening folders if needed.
+
+`:NvimTreeCollapse` Collapses the nvim-tree recursively.
+
+## Roadmap
+
+nvim-tree is stable and new major features will not be added. The focus is on existing user experience.
+
+Users are encouraged to add their own custom features via the public [API](#api).
+
+Development is focused on:
+* Bug fixes
+* Performance
+* Quality of Life improvements
+* API / Events
+* Enhancements to existing features
+
+## API
+
+nvim-tree exposes a public API. This is non breaking, with additions made as necessary. See [:help nvim-tree-api](doc/nvim-tree-lua.txt)
+
+See wiki [Recipes](https://github.com/nvim-tree/nvim-tree.lua/wiki/Recipes) and [Tips](https://github.com/nvim-tree/nvim-tree.lua/wiki/Tips) for ideas and inspiration.
+
+Please raise a [feature request](https://github.com/nvim-tree/nvim-tree.lua/issues/new?assignees=&labels=feature+request&template=feature_request.md&title=) if the API is insufficient for your needs. Contributions are always welcome, see below.
+
+You may also subscribe to events that nvim-tree will dispatch in a variety of situations, see [:help nvim-tree-events](doc/nvim-tree-lua.txt)
+
+## Contributing
+
+PRs are always welcome. See [CONTRIBUTING](CONTRIBUTING.md) and [wiki: Development](https://github.com/nvim-tree/nvim-tree.lua/wiki/Development) to get started.
+
+See [bug](https://github.com/nvim-tree/nvim-tree.lua/issues?q=is%3Aissue+is%3Aopen+label%3Abug) and [PR Please](https://github.com/nvim-tree/nvim-tree.lua/issues?q=is%3Aopen+is%3Aissue+label%3A%22PR+please%22) issues if you are looking for some work to get you started.
 
 ## Screenshots
 
-![alt text](.github/screenshot.png?raw=true "kyazdani42 tree")
-![alt text](.github/screenshot2.png?raw=true "akin909 tree")
-![alt text](.github/screenshot3.png?raw=true "stsewd tree")
-![alt text](.github/screenshot4.png?raw=true "reyhankaplan tree")
+See [Showcases](https://github.com/nvim-tree/nvim-tree.lua/wiki/Showcases) wiki page for examples of user's configurations with sources.
+
+Please add your own!
+
+## Team
+
+* [@alex-courtis](https://github.com/alex-courtis) Arch Linux
+* [@gegoune](https://github.com/gegoune) macOS
+* [@Akmadan23](https://github.com/Akmadan23) Linux
+* [@dependabot[bot]](https://github.com/apps/dependabot) Ubuntu Linux
